@@ -12,7 +12,7 @@ class TensorList(Sequence):
     def __init__(
         self,
         *,
-        device: torch.DeviceObjType,
+        device: torch.DeviceObjType = "cpu",
         size: Tuple[int] = None,
         buffer_size: int = 1000,
     ):
