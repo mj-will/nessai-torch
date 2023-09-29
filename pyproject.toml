@@ -25,6 +25,15 @@ dependencies = [
 
 dynamic = ["version"]
 
+[project.optional-dependencies]
+plot = [
+    "corner",
+]
+dev = [
+    "corner",
+    "pytest",
+]
+
 [tool.setuptools_scm]
 
 [tool.black]
