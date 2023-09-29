@@ -1,4 +1,5 @@
 """Plotting functions"""
+import logging
 from typing import List, Optional
 
 from matplotlib.figure import Figure
@@ -6,6 +7,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy import stats
 import torch
+
+logger = logging.getLogger(__name__)
 
 
 def save_figure(
@@ -87,4 +90,19 @@ def plot_insertion_indices(
 
     axs[1].set_xlim(0, nlive - 1)
 
+    return save_figure(fig, filename)
+
+
+def corner_plot(
+    samples: torch.Tensor, filename: Optional[str] = None
+) -> Optional[Figure]:
+    try:
+        import corner
+    except ImportError as e:
+        logger.error(
+            f"Could not import corner, skipping corner plot! Error: {e}"
+        )
+        return
+    samples = samples.cpu().numpy()
+    fig = corner.corner(samples)
     return save_figure(fig, filename)
