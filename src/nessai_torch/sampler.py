@@ -9,6 +9,7 @@ from .evidence import EvidenceIntegral
 from .proposal.base import ProposalWithPool
 from .proposal.flow import FlowProposal
 from .utils.sample import rejection_sample
+from .tensorlist import TensorList
 
 
 logger = logging.getLogger(__name__)
@@ -44,9 +45,11 @@ class Sampler:
 
         os.makedirs(self.outdir, exist_ok=True)
 
-        self._nested_samples = []
+        self._nested_samples = TensorList(
+            size=(self.dims,), device=self.device
+        )
         self.acceptance = []
-        self.indices = []
+        self.indices = TensorList(device=self.device)
         self.live_points = None
         self.logl = None
         self.logl_min = -torch.inf
@@ -63,7 +66,7 @@ class Sampler:
             issubclass(proposal_class, ProposalWithPool)
             and "poolsize" not in kwargs
         ):
-            kwargs["poolsize"] = self.nlive
+            kwargs["poolsize"] = 10 * self.nlive
 
         self.proposal = proposal_class(
             dims=self.dims,
@@ -80,9 +83,7 @@ class Sampler:
 
     @property
     def nested_samples(self) -> torch.tensor:
-        ns = torch.stack(self._nested_samples, dim=0).detach()
-        ns.requires_grad_(False)
-        return ns
+        return self._nested_samples.data
 
     @property
     def posterior_samples(self) -> torch.Tensor:
@@ -156,7 +157,7 @@ class Sampler:
             if logl > self.logl_min:
                 break
         index = self.insert_live_point(x, logl)
-        self.indices.append(index.item())
+        self.indices.append(index)
         self.acceptance.append(1 / count)
         self.logl_max = self.logl[-1]
         self.logl_min = self.logl[0]
@@ -187,7 +188,9 @@ class Sampler:
         fig.savefig(os.path.join(self.outdir, "acceptance.png"))
 
         fig = plt.figure()
-        plt.hist(self.indices, 20, density=True, histtype="step")
+        plt.hist(
+            self.indices.data.cpu().numpy(), 20, density=True, histtype="step"
+        )
         fig.savefig(os.path.join(self.outdir, "indices.png"))
         plt.close("all")
 
