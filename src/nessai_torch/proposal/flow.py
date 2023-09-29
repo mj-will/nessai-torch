@@ -222,13 +222,15 @@ class FlowProposal(ProposalWithPool):
                 if self.cvm_radius:
                     z = sample_nball(
                         dims=self.dims,
-                        n=n,
+                        n=batch_size,
                         radius=self.cvm_radius,
                         device=self.device,
                     )
                     log_q = torch.zeros(n, device=self.device)
                 else:
-                    z, log_q = self.flow._distribution.sample_and_log_prob(n)
+                    z, log_q = self.flow._distribution.sample_and_log_prob(
+                        batch_size
+                    )
 
                 x, log_j = self.flow.inverse(z)
                 log_q = log_q - log_j
