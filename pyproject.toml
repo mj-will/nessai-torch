@@ -19,6 +19,7 @@ dependencies = [
     "glasflow",
     "scipy",
     "matplotlib",
+    "numpy",
     "torch",
 ]
 
