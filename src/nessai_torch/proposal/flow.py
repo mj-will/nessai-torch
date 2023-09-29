@@ -226,7 +226,7 @@ class FlowProposal(ProposalWithPool):
                         radius=self.cvm_radius,
                         device=self.device,
                     )
-                    log_q = torch.zeros(n, device=self.device)
+                    log_q = torch.zeros(batch_size, device=self.device)
                 else:
                     z, log_q = self.flow._distribution.sample_and_log_prob(
                         batch_size
