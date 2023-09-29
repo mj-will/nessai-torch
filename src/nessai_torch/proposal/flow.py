@@ -4,8 +4,8 @@ import math
 import os
 from typing import Optional, Tuple, Union
 
+import glasflow
 import matplotlib.pyplot as plt
-import normflows as nf
 from scipy import stats
 import torch
 
@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 class FlowProposal(ProposalWithPool):
     """Proposal that draws samples using a normalizing flow"""
 
-    flow: nf.NormalizingFlow = None
+    flow: glasflow.flows.base.Flow = None
     scale: torch.Tensor = None
     shift: torch.Tensor = None
     flow_config: dict = None
