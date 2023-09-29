@@ -1,0 +1,90 @@
+"""Plotting functions"""
+from typing import List, Optional
+
+from matplotlib.figure import Figure
+import matplotlib.pyplot as plt
+import numpy as np
+from scipy import stats
+import torch
+
+
+def save_figure(
+    figure: Figure, filename: Optional[str] = None
+) -> Optional[Figure]:
+    if filename is not None:
+        figure.tight_layout()
+        figure.savefig(filename)
+        plt.close(figure)
+    else:
+        return figure
+
+
+def plot_trace(
+    logx: torch.Tensor,
+    nested_samples: torch.Tensor,
+    filename: Optional[str] = None,
+) -> Optional[Figure]:
+    """Produce a trace plot."""
+
+    logx = logx.cpu().numpy()
+    nested_samples = nested_samples.cpu().numpy()
+
+    dims = nested_samples.shape[-1]
+
+    figsize = (5, dims * 2)
+
+    fig, axs = plt.subplots(dims, 1, sharex=True, figsize=figsize)
+
+    for i, samples in enumerate(nested_samples.T):
+        axs[i].plot(logx, samples, ls="", marker=",")
+
+    axs[-1].set_xlabel(r"$\log X$")
+    axs[-1].invert_xaxis()
+
+    return save_figure(fig, filename)
+
+
+def plot_insertion_indices(
+    indices: torch.Tensor,
+    nlive: int,
+    confidence_intervals: Optional[List[float]] = None,
+    filename: Optional[str] = None,
+) -> Optional[Figure]:
+    """Plot the insertion indices"""
+    indices = indices.cpu().numpy()
+
+    x = np.arange(0, nlive, 1)
+    analytic = x / x[-1]
+
+    n = len(indices)
+    counts = np.bincount(indices, minlength=nlive)
+    estimated = np.cumsum(counts) / n
+
+    if confidence_intervals is None:
+        confidence_intervals = [
+            0.997,
+        ]
+
+    fig, axs = plt.subplots(2, 1, sharex=True)
+
+    axs[0].hist(indices, bins="auto", histtype="step")
+
+    axs[1].plot(x, analytic - estimated)
+
+    for ci in confidence_intervals:
+        bound = (1 - ci) / 2
+        bound_values = stats.binom.ppf(1 - bound, n, analytic) / n
+        lower = bound_values - analytic
+        upper = analytic - bound_values
+        upper[0] = 0
+        upper[-1] = 0
+        lower[0] = 0
+        lower[-1] = 0
+        axs[1].fill_between(x, lower, upper, color="grey", alpha=0.2)
+
+    axs[1].set_xlabel("Insertion index")
+    axs[1].set_ylabel("Analytic - estimated")
+
+    axs[1].set_xlim(0, nlive - 1)
+
+    return save_figure(fig, filename)

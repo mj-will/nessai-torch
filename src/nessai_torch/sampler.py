@@ -2,13 +2,17 @@ import logging
 import os
 from typing import Callable, Optional
 
+from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
+import numpy as np
 import torch
 
 from .evidence import EvidenceIntegral
+from .plot import plot_trace, plot_insertion_indices, save_figure
 from .proposal.base import ProposalWithPool
 from .proposal.flow import FlowProposal
 from .utils.sample import rejection_sample
+from .utils.stats import rolling_mean_numpy
 from .tensorlist import TensorList
 
 
@@ -25,6 +29,9 @@ class Sampler:
         tolerance: float = 0.1,
         outdir: Optional[str] = None,
         plot_pool: bool = False,
+        plot_trace: bool = True,
+        plot_insertion_indices: bool = True,
+        plot_state: bool = True,
         proposal_class: Optional[Callable] = None,
         reset_flow: int = 1,
         device: str = "cpu",
@@ -38,6 +45,9 @@ class Sampler:
         self.iteration = 0
         self.outdir = os.getcwd() if outdir is None else outdir
         self.plot_pool = plot_pool
+        self._plot_trace = plot_trace
+        self._plot_insertion_indices = plot_insertion_indices
+        self._plot_state = plot_state
 
         self.reset_flow = int(reset_flow)
         self.populate_count = 0
@@ -48,8 +58,10 @@ class Sampler:
         self._nested_samples = TensorList(
             size=(self.dims,), device=self.device
         )
-        self.acceptance = []
-        self.indices = TensorList(device=self.device)
+        self.history = dict(
+            acceptance=[],
+        )
+        self.indices = TensorList(device=self.device, dtype=torch.int)
         self.live_points = None
         self.logl = None
         self.logl_min = -torch.inf
@@ -66,7 +78,7 @@ class Sampler:
             issubclass(proposal_class, ProposalWithPool)
             and "poolsize" not in kwargs
         ):
-            kwargs["poolsize"] = 10 * self.nlive
+            kwargs["poolsize"] = self.nlive
 
         self.proposal = proposal_class(
             dims=self.dims,
@@ -127,7 +139,7 @@ class Sampler:
         self.live_points[index - 1, :] = x
         self.logl.data[: index - 1] = self.logl[1:index].clone()
         self.logl[index - 1] = logl
-        return index
+        return index - 1
 
     def step(self) -> None:
         """Perform one nested sampling step"""
@@ -158,7 +170,7 @@ class Sampler:
                 break
         index = self.insert_live_point(x, logl)
         self.indices.append(index)
-        self.acceptance.append(1 / count)
+        self.history["acceptance"].append(1 / count)
         self.logl_max = self.logl[-1]
         self.logl_min = self.logl[0]
 
@@ -171,28 +183,49 @@ class Sampler:
         )
 
     def plot(self) -> None:
-        fig, axs = plt.subplots(self.dims, 1, sharex=True)
+        if self._plot_trace:
+            plot_trace(
+                self.integral.logx.data[1:],
+                self.nested_samples,
+                filename=os.path.join(self.outdir, "trace.png"),
+            )
 
-        ns = self.nested_samples.cpu()
-        for i in range(self.dims):
-            axs[i].scatter(self.integral.logx.data[1:].cpu(), ns[:, i], s=1.0)
+        if self._plot_insertion_indices:
+            plot_insertion_indices(
+                self.indices.data,
+                nlive=self.nlive,
+                filename=os.path.join(self.outdir, "insertion_indices.png"),
+            )
 
-        axs[-1].set_xlabel(r"$\log X$")
+        if self._plot_state:
+            self.plot_state(os.path.join(self.outdir, "state.png"))
 
-        fig.savefig(os.path.join(self.outdir, "trace.png"))
+    def plot_state(self, filename: Optional[str] = None) -> Optional[Figure]:
+        n_plots = 2
 
-        fig = plt.figure()
-        plt.plot(self.acceptance, ",")
-        plt.xlabel("Iteration")
-        plt.ylabel("Acceptance")
-        fig.savefig(os.path.join(self.outdir, "acceptance.png"))
+        fig, axs = plt.subplots(n_plots, 1, sharex=True)
 
-        fig = plt.figure()
-        plt.hist(
-            self.indices.data.cpu().numpy(), 20, density=True, histtype="step"
+        its = np.arange(self.iteration)
+
+        j = 0
+
+        # logl will be longer than its after finalizing the run
+        axs[j].plot(self.integral.logl.data[1:].cpu().numpy())
+        axs[j].set_ylabel(r"$\log L^{*}$")
+        j += 1
+
+        axs[j].plot(its, self.history["acceptance"], marker=",", ls="")
+        axs[j].plot(
+            its,
+            rolling_mean_numpy(self.history["acceptance"], self.nlive // 10),
+            color="C0",
         )
-        fig.savefig(os.path.join(self.outdir, "indices.png"))
-        plt.close("all")
+        axs[j].set_ylabel("Acceptance")
+        axs[j].set_yscale("log")
+        j += 1
+
+        axs[-1].set_xlabel("Iteration")
+        return save_figure(fig, filename)
 
     def run(self) -> None:
         self.initialise()
