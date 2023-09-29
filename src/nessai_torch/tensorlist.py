@@ -1,7 +1,7 @@
 from collections.abc import Sequence
 import logging
 import math
-from typing import Tuple
+from typing import Optional, Tuple
 
 import torch
 
@@ -15,12 +15,14 @@ class TensorList(Sequence):
         device: torch.DeviceObjType = "cpu",
         size: Tuple[int] = None,
         buffer_size: int = 1000,
+        dtype: Optional[torch.dtype] = None,
     ):
         self.device = device
         self.buffer_size = buffer_size
         if size is None:
             size = ()
         self._size = size
+        self.dtype = dtype if dtype is not None else torch.get_default_dtype()
         self.buffer = self._new_buffer()
         self.current_buffer_size = len(self.buffer)
         self._count = 0
@@ -58,6 +60,7 @@ class TensorList(Sequence):
             self.buffer_size,
             *self._size,
             device=self.device,
+            dtype=self.dtype,
         )
 
     def _extend_buffer(self, n: int = 1) -> None:
