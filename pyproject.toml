@@ -32,9 +32,16 @@ plot = [
 dev = [
     "corner",
     "pytest",
+    "pytest-requires",
+]
+bilby = [
+    "bilby",
 ]
 
 [tool.setuptools_scm]
 
 [tool.black]
 line-length = 79
+
+[project.entry-points."bilby.samplers"]
+nessai_torch = "nessai_torch.plugins.bilby:NessaiTorch"
