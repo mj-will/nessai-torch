@@ -25,6 +25,7 @@ def save_figure(
 def plot_trace(
     logx: torch.Tensor,
     nested_samples: torch.Tensor,
+    labels: Optional[List[str]] = None,
     filename: Optional[str] = None,
 ) -> Optional[Figure]:
     """Produce a trace plot."""
@@ -38,8 +39,12 @@ def plot_trace(
 
     fig, axs = plt.subplots(dims, 1, sharex=True, figsize=figsize)
 
+    if labels is None:
+        labels = [f"x_{i}" for i in range(dims)]
+
     for i, samples in enumerate(nested_samples.T):
         axs[i].plot(logx, samples, ls="", marker=",")
+        axs[i].set_ylabel(labels[i])
 
     axs[-1].set_xlabel(r"$\log X$")
     axs[-1].invert_xaxis()
@@ -94,7 +99,10 @@ def plot_insertion_indices(
 
 
 def corner_plot(
-    samples: torch.Tensor, filename: Optional[str] = None
+    samples: torch.Tensor,
+    labels: Optional[list[str]] = None,
+    filename: Optional[str] = None,
+    **kwargs,
 ) -> Optional[Figure]:
     try:
         import corner
@@ -104,5 +112,5 @@ def corner_plot(
         )
         return
     samples = samples.cpu().numpy()
-    fig = corner.corner(samples)
+    fig = corner.corner(samples, labels=labels, **kwargs)
     return save_figure(fig, filename)
