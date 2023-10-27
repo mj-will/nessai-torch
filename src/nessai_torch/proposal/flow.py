@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 class FlowProposal(ProposalWithPool):
     """Proposal that draws samples using a normalizing flow"""
 
+    trainable: bool = True
     flow: glasflow.flows.base.Flow = None
     scale: torch.Tensor = None
     shift: torch.Tensor = None
@@ -142,7 +143,10 @@ class FlowProposal(ProposalWithPool):
                 logger.debug("Stopping training early")
                 break
 
-        self.flow.load_state_dict(best_state)
+        if best_state:
+            self.flow.load_state_dict(best_state)
+        else:
+            raise RuntimeWarning("Flow failed to train!")
         self.flow.eval()
 
     def rescale(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -195,10 +199,7 @@ class FlowProposal(ProposalWithPool):
         logl: torch.Tensor,
         n: Optional[int] = None,
         batch_size: Optional[int] = None,
-        **kwargs,
     ) -> None:
-        self.train(live_points, logl, **kwargs)
-
         if n is None:
             n = self.poolsize
 

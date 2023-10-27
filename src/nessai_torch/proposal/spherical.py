@@ -15,11 +15,16 @@ class SphericalProposal(Proposal):
         The device to use for new samples.
     """
 
-    populated: bool = True
-
-    def __init__(self, *, dims: int, device: torch.DeviceObjType) -> None:
+    def __init__(
+        self, *, dims: int, device: torch.DeviceObjType, trainable: bool = True
+    ) -> None:
         super().__init__(dims=dims, device=device)
         self.origin = 0.5 * torch.ones(self.dims, device=device)
+        self.trainable = trainable
+
+    def train(self, live_points: torch.Tensor, logl: torch.Tensor):
+        """Updates the origin to the sample with highest log-likelihood"""
+        self.origin = live_points.mean(dim=0)
 
     def draw(self, sample: torch.tensor, n=1) -> torch.tensor:
         max_radius = torch.sqrt((torch.sum((sample - self.origin) ** 2)))

@@ -28,6 +28,7 @@ class Sampler:
         nlive: int = 1000,
         tolerance: float = 0.1,
         outdir: Optional[str] = None,
+        parameter_labels: Optional[list[str]] = None,
         plot_pool: bool = False,
         plot_trace: bool = True,
         plot_insertion_indices: bool = True,
@@ -35,6 +36,7 @@ class Sampler:
         proposal_class: Optional[Callable] = None,
         reset_flow: int = 1,
         device: str = "cpu",
+        seed: Optional[int] = None,
         **kwargs,
     ) -> None:
         self.log_likelihood = log_likelihood
@@ -48,12 +50,18 @@ class Sampler:
         self._plot_trace = plot_trace
         self._plot_insertion_indices = plot_insertion_indices
         self._plot_state = plot_state
+        self.parameter_labels = parameter_labels
+        self.seed = seed
 
         self.reset_flow = int(reset_flow)
         self.populate_count = 0
         self.device = torch.device(device)
 
         os.makedirs(self.outdir, exist_ok=True)
+
+        if self.seed:
+            logger.info(f"Setting random seed to: {self.seed}")
+            torch.manual_seed(self.seed)
 
         self._nested_samples = TensorList(
             size=(self.dims,), device=self.device
@@ -95,13 +103,22 @@ class Sampler:
 
     @property
     def nested_samples(self) -> torch.tensor:
-        return self._nested_samples.data
+        return self.prior_transform(self._nested_samples.data)
 
     @property
     def posterior_samples(self) -> torch.Tensor:
         return rejection_sample(
-            self.nested_samples, self.integral.log_posterior_weights
+            self.nested_samples,
+            self.log_posterior_weights,
         )
+
+    @property
+    def log_posterior_weights(self) -> torch.Tensor:
+        return self.integral.log_posterior_weights
+
+    @property
+    def log_evidence(self) -> torch.Tensor:
+        return self.integral.logz
 
     def initialise(self) -> None:
         self.live_points = torch.rand(
@@ -148,20 +165,33 @@ class Sampler:
         self._nested_samples.append(self.live_points[0].detach().clone())
         count = 0
         while True:
-            if not self.proposal.populated:
-                self.proposal.populate(
+            if self.proposal.has_pool:
+                if not self.proposal.populated:
+                    if self.proposal.trainable:
+                        self.proposal.train(
+                            self.live_points,
+                            self.logl,
+                            reset=self.reset_flow
+                            and (
+                                not bool(self.populate_count % self.reset_flow)
+                            ),
+                        )
+                    self.proposal.populate(
+                        self.live_points,
+                        self.logl,
+                    )
+                    self.proposal.compute_likelihoods(
+                        self.log_likelihood,
+                        self.prior_transform,
+                    )
+                    if self.plot_pool:
+                        self.proposal.plot(self.outdir)
+                    self.populate_count += 1
+            elif self.proposal.trainable:
+                self.proposal.train(
                     self.live_points,
                     self.logl,
-                    reset=self.reset_flow
-                    and (not bool(self.populate_count % self.reset_flow)),
                 )
-                self.proposal.compute_likelihoods(
-                    self.log_likelihood,
-                    self.prior_transform,
-                )
-                if self.plot_pool:
-                    self.proposal.plot(self.outdir)
-                self.populate_count += 1
             x, logl = self.proposal.draw(self.live_points[0])
             if logl is None:
                 logl = self.log_likelihood(self.prior_transform(x))
@@ -187,6 +217,7 @@ class Sampler:
             plot_trace(
                 self.integral.logx.data[1:],
                 self.nested_samples,
+                labels=self.parameter_labels,
                 filename=os.path.join(self.outdir, "trace.png"),
             )
 

@@ -5,7 +5,9 @@ import torch
 
 
 class Proposal:
+    has_pool: bool = False
     populated: bool = False
+    trainable: bool = False
 
     def __init__(self, *, dims: int, device: torch.DeviceObjType) -> None:
         self.dims = dims
@@ -17,7 +19,9 @@ class Proposal:
 
 
 class ProposalWithPool(Proposal):
+    has_pool: bool = True
     populated: bool = False
+    trainable: bool = False
     indices: List[int] = None
     samples: torch.Tensor = None
     logl: torch.Tensor = None
