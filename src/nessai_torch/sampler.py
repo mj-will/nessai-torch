@@ -34,7 +34,7 @@ class Sampler:
         plot_insertion_indices: bool = True,
         plot_state: bool = True,
         proposal_class: Optional[Callable] = None,
-        reset_flow: int = 1,
+        reset_flow: int = 0,
         device: str = "cpu",
         seed: Optional[int] = None,
         **kwargs,
@@ -119,6 +119,14 @@ class Sampler:
     @property
     def log_evidence(self) -> torch.Tensor:
         return self.integral.logz
+    
+    @property
+    def should_reset(self) -> bool:
+        """Boolean that indicates if the proposal should be reset"""
+        return (
+            self.reset_flow
+            and not bool(self.populate_count % self.reset_flow)
+        )
 
     def initialise(self) -> None:
         self.live_points = torch.rand(
@@ -168,14 +176,12 @@ class Sampler:
             if self.proposal.has_pool:
                 if not self.proposal.populated:
                     if self.proposal.trainable:
-                        self.proposal.train(
-                            self.live_points,
-                            self.logl,
-                            reset=self.reset_flow
-                            and (
-                                not bool(self.populate_count % self.reset_flow)
-                            ),
-                        )
+                        with torch.enable_grad():
+                            self.proposal.train(
+                                self.live_points,
+                                self.logl,
+                                reset=self.should_reset,
+                            )
                     self.proposal.populate(
                         self.live_points,
                         self.logl,
@@ -188,10 +194,11 @@ class Sampler:
                         self.proposal.plot(self.outdir)
                     self.populate_count += 1
             elif self.proposal.trainable:
-                self.proposal.train(
-                    self.live_points,
-                    self.logl,
-                )
+                with torch.enable_grad():
+                    self.proposal.train(
+                        self.live_points,
+                        self.logl,
+                    )
             x, logl = self.proposal.draw(self.live_points[0])
             if logl is None:
                 logl = self.log_likelihood(self.prior_transform(x))
