@@ -30,12 +30,10 @@ class ProposalWithPool(Proposal):
     def populate(self, live_points: torch.Tensor, logl: torch.Tensor) -> None:
         raise NotImplementedError
 
-    def compute_likelihoods(
-        self, log_likelihood: Callable, prior_transform: Callable
-    ) -> None:
+    def compute_likelihoods(self, log_likelihood_fn: Callable) -> None:
         if self.samples is None or not self.populated:
             raise RuntimeError("Proposal is not populated")
-        self.logl = log_likelihood(prior_transform(self.samples))
+        self.logl = log_likelihood_fn(self.samples)
 
     def draw(self, x: torch.Tensor) -> torch.Tensor:
         if not self.populated:
