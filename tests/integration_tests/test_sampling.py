@@ -13,11 +13,6 @@ def dims():
 
 
 @pytest.fixture
-def device():
-    return "cpu"
-
-
-@pytest.fixture
 def sampler_inputs(dims, device):
     mean = torch.zeros(dims, device=device)
     cov = torch.eye(dims, device=device)
@@ -34,10 +29,21 @@ def sampler_inputs(dims, device):
 
 
 @pytest.mark.parametrize(
-    "ProposalClass",
-    [FlowProposal, SphericalProposal],
+    "ProposalClass, kwargs",
+    [
+        (
+            FlowProposal,
+            {"sample_nball": False, "constant_volume_fraction": 0.95},
+        ),
+        (
+            FlowProposal,
+            {"sample_nball": True, "constant_volume_fraction": 0.95},
+        ),
+        (FlowProposal, {}),
+        (SphericalProposal, {}),
+    ],
 )
-def test_sampling(sampler_inputs, device, ProposalClass, tmp_path):
+def test_sampling(sampler_inputs, device, ProposalClass, tmp_path, kwargs):
     dims, log_likelihood, prior_transform = sampler_inputs
 
     outdir = tmp_path / "test_proposal"
@@ -52,5 +58,6 @@ def test_sampling(sampler_inputs, device, ProposalClass, tmp_path):
         nlive=50,
         tolerance=5.0,
         proposal_class=ProposalClass,
+        **kwargs,
     )
     sampler.run()
