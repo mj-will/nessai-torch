@@ -236,8 +236,11 @@ class FlowProposal(ProposalWithPool):
         if batch_size is None:
             batch_size = self.batch_size
 
-        samples = torch.empty((n, self.dims), device=self.device)
-        m = 0
+        samples = torch.empty((0, self.dims), device=self.device)
+        log_weights = torch.empty(0, device=self.device)
+        log_n = math.log(n)
+        log_m = -math.inf
+        log_constant = -torch.inf
 
         if self.truncate_log_q:
             x, log_j = self.rescale(live_points)
@@ -247,39 +250,38 @@ class FlowProposal(ProposalWithPool):
 
         self.flow.eval()
 
-        with torch.inference_mode():
-            while m < n:
+        while log_m < log_n:
+            with torch.inference_mode():
                 z, log_q = self._draw_latent_samples(batch_size)
                 x, log_j = self.flow.inverse(z)
-                log_q = log_q - log_j
+            log_q = log_q - log_j
 
-                # Rescale
-                x, log_j = self.rescale_inverse(x)
-                log_q = log_q - log_j
-                # Reject out-of-bounds
-                ib = ~torch.any((x < 0.0) | (x > 1.0), dim=1)
-                if not torch.any(ib):
-                    continue
-                x, log_q = x[ib, ...], log_q[ib]
+            # Rescale
+            x, log_j = self.rescale_inverse(x)
+            log_q = log_q - log_j
+            # Reject out-of-bounds
+            ib = ~torch.any((x < 0.0) | (x > 1.0), dim=1)
+            if not torch.any(ib):
+                continue
+            x, log_q = x[ib, ...], log_q[ib]
 
-                if log_q_min:
-                    keep = log_q > log_q_min
-                    x, log_q = x[keep, ...], log_q[keep]
+            if log_q_min:
+                keep = log_q > log_q_min
+                x, log_q = x[keep, ...], log_q[keep]
 
-                # Rejection sampling
-                # w = p / (q / max(q))
-                log_w = -log_q + log_q.min()
-                log_u = torch.log(torch.rand_like(log_w))
-                accept = log_w > log_u
-                if not torch.any(accept):
-                    continue
-                # Add to samples
-                k = min(accept.sum(), n - m)
-                samples[m : m + k] = x[accept][:k]
-                m += k
+            # Rejection sampling
+            # w = p / (q / max(q))
+            log_w = -log_q + log_q.min()
 
-        self.samples = samples
+            log_weights = torch.cat([log_weights, log_w])
+            log_constant = max(log_constant, torch.max(log_w))
+            samples = torch.cat([samples, x], dim=0)
+            log_m = torch.logsumexp(log_weights - log_constant, -1)
+
+        log_u = torch.log(torch.rand_like(log_weights))
+        accept = log_weights > log_u
+        self.samples = samples[accept][:n]
         self.logl = None
-        self.indices = list(range(n))
+        self.indices = list(range(len(self.samples)))
         self.count += 1
         self.populated = True
