@@ -1,6 +1,7 @@
 from .base import Proposal
 
 import torch
+from typing import Callable
 
 
 class SphericalProposal(Proposal):
@@ -16,9 +17,16 @@ class SphericalProposal(Proposal):
     """
 
     def __init__(
-        self, *, dims: int, device: torch.DeviceObjType, trainable: bool = True
+        self,
+        *,
+        dims: int,
+        device: torch.DeviceObjType,
+        log_likelihood_fn: Callable,
+        trainable: bool = True,
     ) -> None:
-        super().__init__(dims=dims, device=device)
+        super().__init__(
+            dims=dims, device=device, log_likelihood_fn=log_likelihood_fn
+        )
         self.origin = 0.5 * torch.ones(self.dims, device=device)
         self.trainable = trainable
 

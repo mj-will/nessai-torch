@@ -94,6 +94,7 @@ class Sampler:
         self.proposal = proposal_class(
             dims=self.dims,
             device=self.device,
+            log_likelihood_fn=self.log_likelihood_unit_hypercube,
             **kwargs,
         )
 
@@ -193,9 +194,7 @@ class Sampler:
                         self.live_points,
                         self.logl,
                     )
-                    self.proposal.compute_likelihoods(
-                        self.log_likelihood_unit_hypercube,
-                    )
+                    self.proposal.compute_likelihoods()
                     if self.plot_pool:
                         self.proposal.plot(self.outdir)
                     self.populate_count += 1
@@ -209,7 +208,7 @@ class Sampler:
             if logl is None:
                 logl = self.log_likelihood_unit_hypercube(x)
             count += 1
-            if logl > self.logl_min:
+            if torch.isfinite(logl) and logl > self.logl_min:
                 break
         index = self.insert_live_point(x, logl)
         self.indices.append(index)
