@@ -86,10 +86,7 @@ class Sampler:
         if proposal_class is None:
             proposal_class = FlowProposal
 
-        if (
-            issubclass(proposal_class, ProposalWithPool)
-            and "poolsize" not in kwargs
-        ):
+        if proposal_class.has_pool and "poolsize" not in kwargs:
             kwargs["poolsize"] = self.nlive
 
         self.proposal = proposal_class(
