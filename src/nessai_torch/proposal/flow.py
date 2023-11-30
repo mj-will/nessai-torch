@@ -14,7 +14,10 @@ from .base import ProposalWithPool
 from ..flows import get_realnvp
 from ..tensorlist import TensorList
 from ..transforms import logit_with_jacobian, sigmoid_with_jacobian
-from ..utils.sample import sample_nball
+from ..utils.sample import (
+    sample_nball,
+    sample_radially_truncated_gaussian,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +41,7 @@ class FlowProposal(ProposalWithPool):
         logit: bool = False,
         constant_volume_fraction: Optional[float] = None,
         truncate_log_q: bool = False,
+        sample_nball: bool = False,
         flow_config: Optional[dict] = None,
     ) -> None:
         super().__init__(dims=dims, device=device)
@@ -45,16 +49,31 @@ class FlowProposal(ProposalWithPool):
         self.poolsize = poolsize
         self.batch_size = batch_size
         self.truncate_log_q = truncate_log_q
+        self.sample_nball = sample_nball
         self.logit = logit
         self.count = 0
 
         self.configure_flow(flow_config)
+        self.configure_constant_volume_mode(constant_volume_fraction)
 
+    def configure_constant_volume_mode(
+        self, constant_volume_fraction: float
+    ) -> None:
+        """Configure constant volume mode.
+
+        Sets the radius and u_max (is :code:`sample_nball=False`)
+        """
         self.constant_volume_fraction = constant_volume_fraction
+        self.u_max = None
         if self.constant_volume_fraction is not None:
             self.cvm_radius = torch.tensor(
                 stats.chi.ppf(self.constant_volume_fraction, self.dims)
             )
+            if not self.sample_nball:
+                self.u_max = torch.tensor(
+                    stats.chi(df=self.dims).cdf(self.cvm_radius),
+                    device=self.device,
+                )
             logger.debug(f"CVM radius: {self.cvm_radius.item():.3f}")
         else:
             self.cvm_radius = None
@@ -177,21 +196,32 @@ class FlowProposal(ProposalWithPool):
         fig.savefig(os.path.join(outdir, f"pool_{self.count}.png"))
         plt.close()
 
-    def sample_truncated_gaussian(self, n: int) -> torch.Tensor:
-        """Draw n samples from a radially truncated Gaussian.
-
-        Parameters
-        ----------
-        n : int
-            Number of samples
-        radius : float
-            Radius
-
-        Returns
-        -------
-        torch.Tensor
-            Samples from the radially truncated Gaussian
-        """
+    def _draw_latent_samples(
+        self, batch_size: int
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        if self.cvm_radius:
+            if self.sample_nball:
+                z = sample_nball(
+                    dims=self.dims,
+                    n=batch_size,
+                    radius=self.cvm_radius,
+                    device=self.device,
+                )
+                log_q = torch.zeros(batch_size, device=self.device)
+            else:
+                z = sample_radially_truncated_gaussian(
+                    dims=self.dims,
+                    n=batch_size,
+                    radius=self.cvm_radius,
+                    device=self.device,
+                    u_max=self.u_max,
+                )
+                # log_q is not normalized but that does not matter
+                # because we normalize the weights in the rejection sampling
+                log_q = self.flow._distribution.log_prob(z)
+        else:
+            z, log_q = self.flow._distribution.sample_and_log_prob(batch_size)
+        return z, log_q
 
     def populate(
         self,
@@ -219,20 +249,7 @@ class FlowProposal(ProposalWithPool):
 
         with torch.inference_mode():
             while m < n:
-                # Sample
-                if self.cvm_radius:
-                    z = sample_nball(
-                        dims=self.dims,
-                        n=batch_size,
-                        radius=self.cvm_radius,
-                        device=self.device,
-                    )
-                    log_q = torch.zeros(batch_size, device=self.device)
-                else:
-                    z, log_q = self.flow._distribution.sample_and_log_prob(
-                        batch_size
-                    )
-
+                z, log_q = self._draw_latent_samples(batch_size)
                 x, log_j = self.flow.inverse(z)
                 log_q = log_q - log_j
 
