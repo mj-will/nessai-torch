@@ -293,3 +293,15 @@ class Sampler:
         self.finalise()
 
         logger.info(f"Total likelihood evaluations: {self.n_likelihood_calls}")
+
+    def get_result_dictionary(self) -> dict:
+        """Return a dictionary containing the results"""
+        results = dict()
+        results["nested_samples"] = self.nested_samples
+        results["log_likelihoods"] = self.logl
+        results["log_posterior_weights"] = self.log_posterior_weights
+        results["log_evidence"] = self.log_evidence
+        results["criterion"] = self.criterion
+        results["insertion_indices"] = self.indices
+        results["n_likelihood_calls"] = self.n_likelihood_calls
+        return results
