@@ -52,11 +52,7 @@ sampler = Sampler(
     flow_config=dict(n_neurons=4, batch_norm_between_transforms=True),
 )
 
-start = time.perf_counter()
 sampler.run()
-end = time.perf_counter()
-
-logger.info(f"Sampling time = {end - start:.3f} s")
 
 post = sampler.posterior_samples.cpu().numpy()
 plt.scatter(post[:, 0], post[:, 1])
