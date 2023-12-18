@@ -1,5 +1,6 @@
 import logging
 import os
+import time
 from typing import Callable, Optional
 
 from matplotlib.figure import Figure
@@ -57,6 +58,7 @@ class Sampler:
         self.reset_flow = int(reset_flow)
         self.populate_count = 0
         self.n_likelihood_calls = 0
+        self.sampling_time = 0
         self.device = torch.device(device)
 
         logger.info(f"Running with device={self.device}")
@@ -277,6 +279,7 @@ class Sampler:
 
     @torch.no_grad()
     def run(self) -> None:
+        start = time.perf_counter()
         self.initialise()
 
         while not self.stop:
@@ -291,8 +294,10 @@ class Sampler:
                 self.plot()
 
         self.finalise()
-
+        stop = time.perf_counter()
+        self.sampling_time += stop - start
         logger.info(f"Total likelihood evaluations: {self.n_likelihood_calls}")
+        logger.info(f"Total sampling time : {self.sampling_time:.1f} s")
 
     def get_result_dictionary(self) -> dict:
         """Return a dictionary containing the results"""
@@ -304,4 +309,5 @@ class Sampler:
         results["criterion"] = self.criterion
         results["insertion_indices"] = self.indices
         results["n_likelihood_calls"] = self.n_likelihood_calls
+        results["sampling_time"] = self.sampling_time
         return results
