@@ -2,7 +2,7 @@ import copy
 import logging
 import math
 import os
-from typing import Optional, Tuple, Union
+from typing import Callable, Optional, Tuple, Union
 
 import glasflow
 import matplotlib.pyplot as plt
@@ -36,6 +36,7 @@ class FlowProposal(ProposalWithPool):
         *,
         dims: int,
         device: torch.DeviceObjType,
+        log_likelihood_fn: Callable,
         poolsize: int,
         batch_size: int = 1000,
         logit: bool = False,
@@ -44,7 +45,9 @@ class FlowProposal(ProposalWithPool):
         sample_nball: bool = False,
         flow_config: Optional[dict] = None,
     ) -> None:
-        super().__init__(dims=dims, device=device)
+        super().__init__(
+            dims=dims, device=device, log_likelihood_fn=log_likelihood_fn
+        )
 
         self.poolsize = poolsize
         self.batch_size = batch_size

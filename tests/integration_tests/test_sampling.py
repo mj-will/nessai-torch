@@ -4,6 +4,7 @@ import torch
 from nessai_torch.sampler import Sampler
 from nessai_torch.utils.bounds import in_bounds
 from nessai_torch.proposal.flow import FlowProposal
+from nessai_torch.proposal.prior import PriorProposal
 from nessai_torch.proposal.spherical import SphericalProposal
 
 
@@ -41,6 +42,7 @@ def sampler_inputs(dims, device):
         ),
         (FlowProposal, {}),
         (SphericalProposal, {}),
+        (PriorProposal, {}),
     ],
 )
 def test_sampling(sampler_inputs, device, ProposalClass, tmp_path, kwargs):

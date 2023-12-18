@@ -11,6 +11,7 @@ from .evidence import EvidenceIntegral
 from .plot import plot_trace, plot_insertion_indices, save_figure
 from .proposal.base import ProposalWithPool
 from .proposal.flow import FlowProposal
+from .proposal.prior import PriorProposal
 from .utils.sample import rejection_sample
 from .utils.stats import rolling_mean_numpy
 from .tensorlist import TensorList
@@ -85,16 +86,20 @@ class Sampler:
         if proposal_class is None:
             proposal_class = FlowProposal
 
-        if (
-            issubclass(proposal_class, ProposalWithPool)
-            and "poolsize" not in kwargs
-        ):
+        if proposal_class.has_pool and "poolsize" not in kwargs:
             kwargs["poolsize"] = self.nlive
 
         self.proposal = proposal_class(
             dims=self.dims,
             device=self.device,
+            log_likelihood_fn=self.log_likelihood_unit_hypercube,
             **kwargs,
+        )
+
+        self.prior_proposal = PriorProposal(
+            dims=self.dims,
+            device=self.device,
+            log_likelihood_fn=self.log_likelihood_unit_hypercube,
         )
 
     @property
@@ -136,12 +141,13 @@ class Sampler:
         return self.log_likelihood(self.prior_transform(x))
 
     def initialise(self) -> None:
-        self.live_points = torch.rand(
-            (self.nlive, self.dims), device=self.device
-        ).requires_grad_(False)
-        logl = self.log_likelihood(self.prior_transform(self.live_points))
+        live_points, logl = list(
+            zip(*[self.prior_proposal.draw(None) for _ in range(self.nlive)])
+        )
+        live_points = torch.cat(live_points, dim=0)
+        logl = torch.cat(logl)
         idx = torch.argsort(logl)
-        self.live_points = self.live_points[idx]
+        self.live_points = live_points[idx]
         self.logl = logl[idx]
 
     def finalise(self) -> None:
@@ -193,9 +199,7 @@ class Sampler:
                         self.live_points,
                         self.logl,
                     )
-                    self.proposal.compute_likelihoods(
-                        self.log_likelihood_unit_hypercube,
-                    )
+                    self.proposal.compute_likelihoods()
                     if self.plot_pool:
                         self.proposal.plot(self.outdir)
                     self.populate_count += 1
@@ -209,7 +213,7 @@ class Sampler:
             if logl is None:
                 logl = self.log_likelihood_unit_hypercube(x)
             count += 1
-            if logl > self.logl_min:
+            if torch.isfinite(logl) and logl > self.logl_min:
                 break
         index = self.insert_live_point(x, logl)
         self.indices.append(index)
