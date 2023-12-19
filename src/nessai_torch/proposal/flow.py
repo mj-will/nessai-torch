@@ -241,6 +241,7 @@ class FlowProposal(ProposalWithPool):
         log_n = math.log(n)
         log_m = -math.inf
         log_constant = -torch.inf
+        n_accepted = 0
 
         if self.truncate_log_q:
             x, log_j = self.rescale(live_points)
@@ -250,7 +251,7 @@ class FlowProposal(ProposalWithPool):
 
         self.flow.eval()
 
-        while log_m < log_n:
+        while n_accepted < n:
             with torch.inference_mode():
                 z, log_q = self._draw_latent_samples(batch_size)
                 x, log_j = self.flow.inverse(z)
@@ -277,10 +278,13 @@ class FlowProposal(ProposalWithPool):
             log_constant = max(log_constant, torch.max(log_w))
             samples = torch.cat([samples, x], dim=0)
             log_m = torch.logsumexp(log_weights - log_constant, -1)
+            if log_m >= log_n:
+                log_u = torch.log(torch.rand_like(log_weights))
+                accept = (log_weights - log_constant) > log_u
+                n_accepted = accept.sum()
 
-        log_u = torch.log(torch.rand_like(log_weights))
-        accept = log_weights > log_u
         self.samples = samples[accept][:n]
+        assert len(self.samples) == n
         self.logl = None
         self.indices = list(range(len(self.samples)))
         self.count += 1
