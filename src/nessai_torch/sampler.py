@@ -15,6 +15,7 @@ from .proposal.flow import FlowProposal
 from .proposal.prior import PriorProposal
 from .utils.sample import rejection_sample
 from .utils.stats import rolling_mean_numpy
+from .utils.io import save_dict_to_hdf5
 from .tensorlist import TensorList
 
 
@@ -30,6 +31,7 @@ class Sampler:
         nlive: int = 1000,
         tolerance: float = 0.1,
         outdir: Optional[str] = None,
+        save: bool = True,
         parameter_labels: Optional[list[str]] = None,
         plot_pool: bool = False,
         plot_trace: bool = True,
@@ -48,6 +50,7 @@ class Sampler:
         self.tolerance = tolerance
         self.iteration = 0
         self.outdir = os.getcwd() if outdir is None else outdir
+        self.save = save
         self.plot_pool = plot_pool
         self._plot_trace = plot_trace
         self._plot_insertion_indices = plot_insertion_indices
@@ -76,6 +79,7 @@ class Sampler:
             acceptance=[],
         )
         self.indices = TensorList(device=self.device, dtype=torch.int)
+        self._logl_nested_samples = TensorList(device=self.device)
         self.live_points = None
         self.logl = None
         self.logl_min = -torch.inf
@@ -112,8 +116,12 @@ class Sampler:
             return False
 
     @property
-    def nested_samples(self) -> torch.tensor:
+    def nested_samples(self) -> torch.Tensor:
         return self.prior_transform(self._nested_samples.data)
+
+    @property
+    def log_likelihoods_nested_samples(self) -> torch.Tensor:
+        return self._logl_nested_samples.data
 
     @property
     def posterior_samples(self) -> torch.Tensor:
@@ -129,6 +137,10 @@ class Sampler:
     @property
     def log_evidence(self) -> torch.Tensor:
         return self.integral.logz
+
+    @property
+    def insertion_indices(self) -> torch.Tensor:
+        return self.indices.data
 
     @property
     def should_reset(self) -> bool:
@@ -186,6 +198,7 @@ class Sampler:
         self.logl_min = self.logl[0].clone()
         self.integral.update(self.logl_min, self.nlive)
         self._nested_samples.append(self.live_points[0].detach().clone())
+        self._logl_nested_samples.append(self.logl[0].detach().clone())
         count = 0
         while True:
             if self.proposal.has_pool:
@@ -299,15 +312,27 @@ class Sampler:
         logger.info(f"Total likelihood evaluations: {self.n_likelihood_calls}")
         logger.info(f"Total sampling time : {self.sampling_time:.1f} s")
 
+        if self.save:
+            self.save_result()
+
     def get_result_dictionary(self) -> dict:
         """Return a dictionary containing the results"""
         results = dict()
         results["nested_samples"] = self.nested_samples
-        results["log_likelihoods"] = self.logl
+        results["log_likelihoods"] = self.log_likelihoods_nested_samples
         results["log_posterior_weights"] = self.log_posterior_weights
         results["log_evidence"] = self.log_evidence
         results["criterion"] = self.criterion
-        results["insertion_indices"] = self.indices
+        results["insertion_indices"] = self.insertion_indices
         results["n_likelihood_calls"] = self.n_likelihood_calls
         results["sampling_time"] = self.sampling_time
         return results
+
+    def save_result(self, filename: Optional[str] = None) -> None:
+        """Save the results to a file.
+
+        Defaults to :code:`result.hdf5` if the filename is not specified.
+        """
+        if filename is None:
+            filename = os.path.join(self.outdir, "result.hdf5")
+        save_dict_to_hdf5(self.get_result_dictionary(), filename)
