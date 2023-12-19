@@ -73,10 +73,7 @@ class FlowProposal(ProposalWithPool):
                 stats.chi.ppf(self.constant_volume_fraction, self.dims)
             )
             if not self.sample_nball:
-                self.u_max = torch.tensor(
-                    stats.chi(df=self.dims).cdf(self.cvm_radius),
-                    device=self.device,
-                )
+                self.u_max = torch.tensor(self.constant_volume_fraction)
             logger.debug(f"CVM radius: {self.cvm_radius.item():.3f}")
         else:
             self.cvm_radius = None
@@ -273,8 +270,8 @@ class FlowProposal(ProposalWithPool):
                 x, log_q = x[keep, ...], log_q[keep]
 
             # Rejection sampling
-            # w = p / (q / max(q))
-            log_w = -log_q + log_q.min()
+            # w = p / q
+            log_w = -log_q
 
             log_weights = torch.cat([log_weights, log_w])
             log_constant = max(log_constant, torch.max(log_w))
