@@ -17,6 +17,7 @@ classifiers = [
 ]
 dependencies = [
     "glasflow",
+    "h5py",
     "scipy",
     "matplotlib",
     "numpy",
