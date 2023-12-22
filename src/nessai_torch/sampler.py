@@ -77,6 +77,7 @@ class Sampler:
         )
         self.history = dict(
             acceptance=[],
+            proposal_acceptance=[],
         )
         self.indices = TensorList(device=self.device, dtype=torch.int)
         self._logl_nested_samples = TensorList(device=self.device)
@@ -210,9 +211,12 @@ class Sampler:
                                 self.logl,
                                 reset=self.should_reset,
                             )
-                    self.proposal.populate(
+                    proposal_acceptance = self.proposal.populate(
                         self.live_points,
                         self.logl,
+                    )
+                    self.history["proposal_acceptance"].append(
+                        (self.iteration, proposal_acceptance)
                     )
                     self.proposal.compute_likelihoods()
                     if self.plot_pool:
@@ -264,7 +268,7 @@ class Sampler:
             self.plot_state(os.path.join(self.outdir, "state.png"))
 
     def plot_state(self, filename: Optional[str] = None) -> Optional[Figure]:
-        n_plots = 2
+        n_plots = 3
 
         fig, axs = plt.subplots(n_plots, 1, sharex=True)
 
@@ -286,6 +290,12 @@ class Sampler:
         axs[j].set_ylabel("Acceptance")
         axs[j].set_yscale("log")
         j += 1
+        proposal_its, proposal_acceptance = np.array(
+            self.history["proposal_acceptance"]
+        ).T
+        axs[j].plot(proposal_its, proposal_acceptance, marker=".", ls="")
+        axs[j].set_ylabel("Proposal acceptance")
+        axs[j].set_yscale("log")
 
         axs[-1].set_xlabel("Iteration")
         return save_figure(fig, filename)
