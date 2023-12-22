@@ -38,7 +38,7 @@ class FlowProposal(ProposalWithPool):
         device: torch.DeviceObjType,
         log_likelihood_fn: Callable,
         poolsize: int,
-        batch_size: int = 1000,
+        batch_size: int = 50_000,
         logit: bool = False,
         constant_volume_fraction: Optional[float] = None,
         truncate_log_q: bool = False,
