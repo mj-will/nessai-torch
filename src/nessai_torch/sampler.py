@@ -290,10 +290,11 @@ class Sampler:
         axs[j].set_ylabel("Acceptance")
         axs[j].set_yscale("log")
         j += 1
-        proposal_its, proposal_acceptance = np.array(
-            self.history["proposal_acceptance"]
-        ).T
-        axs[j].plot(proposal_its, proposal_acceptance, marker=".", ls="")
+        if len(self.history["proposal_acceptance"]):
+            proposal_its, proposal_acceptance = np.array(
+                self.history["proposal_acceptance"]
+            ).T
+            axs[j].plot(proposal_its, proposal_acceptance, marker=".", ls="")
         axs[j].set_ylabel("Proposal acceptance")
         axs[j].set_yscale("log")
 
