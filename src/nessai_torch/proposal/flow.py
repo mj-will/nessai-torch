@@ -43,6 +43,7 @@ class FlowProposal(ProposalWithPool):
         constant_volume_fraction: Optional[float] = None,
         truncate_log_q: bool = False,
         sample_nball: bool = False,
+        max_samples: int = 1_000_000,
         flow_config: Optional[dict] = None,
     ) -> None:
         super().__init__(
@@ -54,6 +55,7 @@ class FlowProposal(ProposalWithPool):
         self.truncate_log_q = truncate_log_q
         self.sample_nball = sample_nball
         self.logit = logit
+        self.max_samples = max_samples
         self.count = 0
 
         self.configure_flow(flow_config)
@@ -242,6 +244,7 @@ class FlowProposal(ProposalWithPool):
         log_m = -math.inf
         log_constant = -torch.inf
         n_accepted = 0
+        n_proposed = 0
 
         if self.truncate_log_q:
             x, log_j = self.rescale(live_points)
@@ -252,6 +255,7 @@ class FlowProposal(ProposalWithPool):
         self.flow.eval()
 
         while n_accepted < n:
+            n_proposed += batch_size
             with torch.inference_mode():
                 z, log_q = self._draw_latent_samples(batch_size)
                 x, log_j = self.flow.inverse(z)
@@ -282,10 +286,18 @@ class FlowProposal(ProposalWithPool):
                 log_u = torch.log(torch.rand_like(log_weights))
                 accept = (log_weights - log_constant) > log_u
                 n_accepted = accept.sum()
+            if len(samples) >= self.max_samples:
+                logger.warning("Reached max samples (%s)", self.max_samples)
+                log_u = torch.log(torch.rand_like(log_weights))
+                accept = (log_weights - log_constant) > log_u
+                n_accepted = accept.sum()
+                break
+
+        acceptance = n_accepted / n_proposed
 
         self.samples = samples[accept][:n]
-        assert len(self.samples) == n
         self.logl = None
         self.indices = list(range(len(self.samples)))
         self.count += 1
         self.populated = True
+        return acceptance
