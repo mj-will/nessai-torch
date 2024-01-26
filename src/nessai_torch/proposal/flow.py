@@ -192,12 +192,6 @@ class FlowProposal(ProposalWithPool):
             log_j += lj.sum(-1)
         return x, log_j
 
-    def plot(self, outdir: str) -> None:
-        fig = plt.figure()
-        plt.scatter(self.samples[:, 0].detach(), self.samples[:, 1].detach())
-        fig.savefig(os.path.join(outdir, f"pool_{self.count}.png"))
-        plt.close()
-
     def _draw_latent_samples(
         self, batch_size: int
     ) -> Tuple[torch.Tensor, torch.Tensor]:

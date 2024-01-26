@@ -9,7 +9,12 @@ import numpy as np
 import torch
 
 from .evidence import EvidenceIntegral
-from .plot import plot_trace, plot_insertion_indices, save_figure
+from .plot import (
+    plot_trace,
+    plot_insertion_indices,
+    save_figure,
+    plot_samples_1d,
+)
 from .proposal.base import ProposalWithPool
 from .proposal.flow import FlowProposal
 from .proposal.prior import PriorProposal
@@ -220,7 +225,15 @@ class Sampler:
                     )
                     self.proposal.compute_likelihoods()
                     if self.plot_pool:
-                        self.proposal.plot(self.outdir)
+                        plot_samples_1d(
+                            self.live_points,
+                            self.proposal.samples,
+                            labels=["live points", "pool"],
+                            parameter_labels=self.parameter_labels,
+                            filename=os.path.join(
+                                self.outdir, f"pool_it_{self.iteration}.png"
+                            ),
+                        )
                     self.populate_count += 1
             elif self.proposal.trainable:
                 with torch.enable_grad():
