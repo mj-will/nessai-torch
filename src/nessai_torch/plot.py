@@ -22,6 +22,10 @@ def save_figure(
         return figure
 
 
+def get_default_figsize() -> list:
+    return list(plt.rcParams["figure.figsize"])
+
+
 def plot_trace(
     logx: torch.Tensor,
     nested_samples: torch.Tensor,
@@ -113,4 +117,41 @@ def corner_plot(
         return
     samples = samples.cpu().numpy()
     fig = corner.corner(samples, labels=labels, **kwargs)
+    return save_figure(fig, filename)
+
+
+def plot_samples_1d(
+    *samples: torch.Tensor,
+    labels: Optional[list[str]] = None,
+    parameter_labels: Optional[list[str]],
+    filename: Optional[str] = None,
+    **kwargs,
+) -> Optional[Figure]:
+    """Plot 1d histograms for one or more sets of samples."""
+    hist_kwargs = dict(
+        density=True,
+        histtype="step",
+    )
+    if kwargs:
+        hist_kwargs.update(kwargs)
+
+    if not labels:
+        labels = [f"samples_{i}" for i in range(len(samples))]
+
+    dims = samples[0].shape[-1]
+    figsize = get_default_figsize()
+    figsize[0] /= 2
+    figsize[1] *= dims / 2
+
+    fig, axs = plt.subplots(dims, 1, figsize=figsize)
+
+    for array, label in zip(samples, labels):
+        for ax, array_1d in zip(axs, array.T):
+            ax.hist(array_1d.detach(), label=label, **hist_kwargs)
+    axs[-1].legend()
+
+    if parameter_labels:
+        for ax, label in zip(axs, parameter_labels):
+            ax.set_xlabel(label)
+
     return save_figure(fig, filename)
