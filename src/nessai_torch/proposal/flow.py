@@ -45,6 +45,7 @@ class FlowProposal(ProposalWithPool):
         sample_nball: bool = False,
         max_samples: int = 1_000_000,
         flow_config: Optional[dict] = None,
+        accumulate_weights: bool = False,
     ) -> None:
         super().__init__(
             dims=dims, device=device, log_likelihood_fn=log_likelihood_fn
@@ -57,6 +58,7 @@ class FlowProposal(ProposalWithPool):
         self.logit = logit
         self.max_samples = max_samples
         self.count = 0
+        self.accumulate_weights = accumulate_weights
 
         self.configure_flow(flow_config)
         self.configure_constant_volume_mode(constant_volume_fraction)
@@ -272,24 +274,38 @@ class FlowProposal(ProposalWithPool):
             # w = p / q
             log_w = -log_q
 
-            log_weights = torch.cat([log_weights, log_w])
-            log_constant = max(log_constant, torch.max(log_w))
-            samples = torch.cat([samples, x], dim=0)
-            log_m = torch.logsumexp(log_weights - log_constant, -1)
-            if log_m >= log_n:
-                log_u = torch.log(torch.rand_like(log_weights))
-                accept = (log_weights - log_constant) > log_u
-                n_accepted = accept.sum()
-            if len(samples) >= self.max_samples:
-                logger.warning("Reached max samples (%s)", self.max_samples)
-                log_u = torch.log(torch.rand_like(log_weights))
-                accept = (log_weights - log_constant) > log_u
-                n_accepted = accept.sum()
-                break
+            if self.accumulate_weights:
+                log_weights = torch.cat([log_weights, log_w])
+                log_constant = max(log_constant, torch.max(log_w))
+                samples = torch.cat([samples, x], dim=0)
+                log_m = torch.logsumexp(log_weights - log_constant, -1)
+                if log_m >= log_n:
+                    log_u = torch.log(torch.rand_like(log_weights))
+                    accept = (log_weights - log_constant) > log_u
+                    n_accepted = accept.sum()
+                if len(samples) >= self.max_samples:
+                    logger.warning(
+                        "Reached max samples (%s)", self.max_samples
+                    )
+                    log_u = torch.log(torch.rand_like(log_weights))
+                    accept = (log_weights - log_constant) > log_u
+                    n_accepted = accept.sum()
+                    break
+            else:
+                log_w = log_w - log_w.max()
+                log_u = torch.log(torch.rand_like(log_w))
+                accept = log_w > log_u
+                n_accept_batch = accept.sum()
+                m = min(n - n_accepted, n_accept_batch)
+                samples = torch.cat([samples, x[:m]])
+                n_accepted += m
 
         acceptance = n_accepted / n_proposed
 
-        self.samples = samples[accept][:n]
+        if self.accumulate_weights:
+            self.samples = samples[accept][:n]
+        else:
+            self.samples = samples[:n]
         self.logl = None
         self.indices = list(range(len(self.samples)))
         self.count += 1
