@@ -35,6 +35,7 @@ class Sampler:
         dims: int,
         nlive: int = 1000,
         tolerance: float = 0.1,
+        sample_prior_iterations: int = 2000,
         outdir: Optional[str] = None,
         save: bool = True,
         parameter_labels: Optional[list[str]] = None,
@@ -64,6 +65,7 @@ class Sampler:
         self.seed = seed
 
         self.reset_flow = int(reset_flow)
+        self.sample_prior_iterations = sample_prior_iterations
         self.populate_count = 0
         self.n_likelihood_calls = 0
         self.sampling_time = 0
@@ -199,6 +201,46 @@ class Sampler:
         self.logl[index - 1] = logl
         return index - 1
 
+    def update_proposal(self) -> None:
+        """Update the proposal.
+
+        This includes training and populating the proposal.
+        """
+        if self.proposal.has_pool:
+            if not self.proposal.populated:
+                if self.proposal.trainable:
+                    with torch.enable_grad():
+                        self.proposal.train(
+                            self.live_points,
+                            self.logl,
+                            reset=self.should_reset,
+                        )
+                proposal_acceptance = self.proposal.populate(
+                    self.live_points,
+                    self.logl,
+                )
+                self.history["proposal_acceptance"].append(
+                    (self.iteration, proposal_acceptance)
+                )
+                self.proposal.compute_likelihoods()
+                if self.plot_pool:
+                    plot_samples_1d(
+                        self.live_points,
+                        self.proposal.samples,
+                        labels=["live points", "pool"],
+                        parameter_labels=self.parameter_labels,
+                        filename=os.path.join(
+                            self.outdir, f"pool_it_{self.iteration}.png"
+                        ),
+                    )
+                self.populate_count += 1
+        elif self.proposal.trainable:
+            with torch.enable_grad():
+                self.proposal.train(
+                    self.live_points,
+                    self.logl,
+                )
+
     def step(self) -> None:
         """Perform one nested sampling step"""
         self.logl_min = self.logl[0].clone()
@@ -207,41 +249,11 @@ class Sampler:
         self._logl_nested_samples.append(self.logl[0].detach().clone())
         count = 0
         while True:
-            if self.proposal.has_pool:
-                if not self.proposal.populated:
-                    if self.proposal.trainable:
-                        with torch.enable_grad():
-                            self.proposal.train(
-                                self.live_points,
-                                self.logl,
-                                reset=self.should_reset,
-                            )
-                    proposal_acceptance = self.proposal.populate(
-                        self.live_points,
-                        self.logl,
-                    )
-                    self.history["proposal_acceptance"].append(
-                        (self.iteration, proposal_acceptance)
-                    )
-                    self.proposal.compute_likelihoods()
-                    if self.plot_pool:
-                        plot_samples_1d(
-                            self.live_points,
-                            self.proposal.samples,
-                            labels=["live points", "pool"],
-                            parameter_labels=self.parameter_labels,
-                            filename=os.path.join(
-                                self.outdir, f"pool_it_{self.iteration}.png"
-                            ),
-                        )
-                    self.populate_count += 1
-            elif self.proposal.trainable:
-                with torch.enable_grad():
-                    self.proposal.train(
-                        self.live_points,
-                        self.logl,
-                    )
-            x, logl = self.proposal.draw(self.live_points[0])
+            if self.iteration < self.sample_prior_iterations:
+                x, logl = self.prior_proposal.draw(self.live_points[0])
+            else:
+                self.update_proposal()
+                x, logl = self.proposal.draw(self.live_points[0])
             if logl is None:
                 logl = self.log_likelihood_unit_hypercube(x)
             count += 1
