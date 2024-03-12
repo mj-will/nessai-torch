@@ -147,6 +147,10 @@ class Sampler:
         return self.integral.logz
 
     @property
+    def log_evidence_error(self) -> torch.Tensor:
+        return self.integral.logz_error
+
+    @property
     def insertion_indices(self) -> torch.Tensor:
         return self.indices.data
 
@@ -184,7 +188,10 @@ class Sampler:
 
         self.plot()
 
-        logger.info(f"Final log-evidence: {self.integral.logz:.3f}")
+        logger.info(
+            f"Final log-evidence: {self.integral.logz:.3f} +/- "
+            f"{self.integral.logz_error:.3f}"
+        )
 
         self.finalised = True
 
@@ -337,7 +344,11 @@ class Sampler:
             self.update_criterion()
             if self.iteration % (self.nlive // 10) == 0:
                 logger.info(
-                    f"it {self.iteration} - log Z={self.integral.logz:.2f}, log dZ={self.criterion:.2f}"
+                    f"it {self.iteration} - "
+                    f"log Z={self.integral.logz:.2f} +/- "
+                    f"{self.integral.logz_error:.2f}, "
+                    f"log dZ={self.criterion:.2f}, "
+                    f"H={self.integral.info:.2f}"
                 )
             if self.iteration % (self.nlive) == 0:
                 self.plot()
@@ -358,6 +369,7 @@ class Sampler:
         results["log_likelihoods"] = self.log_likelihoods_nested_samples
         results["log_posterior_weights"] = self.log_posterior_weights
         results["log_evidence"] = self.log_evidence
+        results["log_evidence_error"] = self.log_evidence_error
         results["criterion"] = self.criterion
         results["insertion_indices"] = self.insertion_indices
         results["n_likelihood_calls"] = self.n_likelihood_calls
