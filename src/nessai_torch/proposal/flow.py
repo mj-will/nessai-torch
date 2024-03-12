@@ -297,7 +297,7 @@ class FlowProposal(ProposalWithPool):
                 accept = log_w > log_u
                 n_accept_batch = accept.sum()
                 m = min(n - n_accepted, n_accept_batch)
-                samples = torch.cat([samples, x[:m]])
+                samples = torch.cat([samples, x[accept][:m]])
                 n_accepted += m
 
         acceptance = n_accepted / n_proposed
