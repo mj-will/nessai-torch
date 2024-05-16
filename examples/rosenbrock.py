@@ -1,4 +1,5 @@
 """Basic example using the Rosenbrock likelihood."""
+
 import os
 
 import torch
