@@ -2,6 +2,41 @@
 
 Implementation of nessai: nested sampling with artificial intelligence in PyTorch.
 
+## Installation
+
+`nessai-torch` can be install using `pip`:
+
+```
+pip install nessai-torch
+```
+
+We recommend install PyTorch first to ensure the version is compatible with
+your system.
+
+## Basic usage
+
+`nessai-torch` has a different API to `nessai`, the user must define a
+log-likelihood function and a prior-transform function instead of a model
+object. It also has a reduced feature set compared to standard `nessai`.
+The basic usage is shown below, for a more complete example, see the
+`examples` directory.
+
+```python
+from nessai_torch.sampler import Sampler
+
+
+sampler = Sampler(
+	log_likelihood=log_likelihood_fn,
+	prior_transform=prior_transform_fn,
+	dims=dims,  # Number of dimensions
+)
+
+# Run the sampler
+sampler.run()
+```
+
+Note that both the `log_likelihood` and `prior_transform` must be vectorized.
+
 ## Citing
 
 If you use nessai-torch in your work please cite the DOI and the relevant papers:
