@@ -1,5 +1,9 @@
 # nessai-torch
 
+[![DOI](https://zenodo.org/badge/682604763.svg)](https://zenodo.org/doi/10.5281/zenodo.11204416)
+[![PyPI](https://img.shields.io/pypi/v/nessai-torch)](https://pypi.org/project/nessai-torch/)
+[![Tests](https://github.com/mj-will/nessai-torch/actions/workflows/tests.yml/badge.svg)](https://github.com/mj-will/nessai-torch/actions/workflows/tests.yml)
+
 Implementation of nessai: nested sampling with artificial intelligence in PyTorch.
 
 ## Installation
