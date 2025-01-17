@@ -46,6 +46,7 @@ class FlowProposal(ProposalWithPool):
         max_samples: int = 1_000_000,
         flow_config: Optional[dict] = None,
         accumulate_weights: bool = False,
+        enforce_likelihood_threshold: bool = False,
     ) -> None:
         super().__init__(
             dims=dims, device=device, log_likelihood_fn=log_likelihood_fn
@@ -59,6 +60,7 @@ class FlowProposal(ProposalWithPool):
         self.max_samples = max_samples
         self.count = 0
         self.accumulate_weights = accumulate_weights
+        self.enforce_likelihood_threshold = enforce_likelihood_threshold
 
         self.configure_flow(flow_config)
         self.configure_constant_volume_mode(constant_volume_fraction)
@@ -242,6 +244,8 @@ class FlowProposal(ProposalWithPool):
         n_accepted = 0
         n_proposed = 0
 
+        logl_min = logl.min()
+
         if self.truncate_log_q:
             x, log_j = self.rescale(live_points)
             log_q_min = (self.flow.forward_and_log_prob(x)[1] + log_j).min()
@@ -269,6 +273,14 @@ class FlowProposal(ProposalWithPool):
             if log_q_min:
                 keep = log_q > log_q_min
                 x, log_q = x[keep, ...], log_q[keep]
+
+            if self.enforce_likelihood_threshold:
+                logl_x = self.log_likelihood_fn(x)
+                keep = logl_x > logl_min
+                x, log_q = x[keep, ...], log_q[keep]
+                if not len(x):
+                    logger.warning("No samples above likelihood threshold")
+                    continue
 
             # Rejection sampling
             # w = p / q
